@@ -7,12 +7,10 @@ if (config.produccion) {
   console.log(`Base de datos: ${config.rutaBaseDatos}`);
   console.log(`Imágenes subidas: ${config.directorioSubidas}`);
   if (config.cargarDemoSiVacia) console.warn('ATENCIÓN: SEED_DEMO=true en producción. Las cuentas de demostración tienen contraseñas públicas.');
-  if (config.urlPublica.includes('localhost')) console.warn('ATENCIÓN: PUBLIC_URL apunta a localhost; el código QR del menú no funcionará fuera del servidor.');
 }
 
 const servidor = app.listen(config.puerto, config.host, () => {
   console.log(`Lately Café escuchando en ${config.host}:${config.puerto} · ${config.urlPublica}`);
-  console.log(`Menú público para el código QR: ${config.urlPublica}/menu`);
 });
 
 // Cierre ordenado (Render envía SIGTERM al reiniciar o desplegar): se dejan de aceptar
