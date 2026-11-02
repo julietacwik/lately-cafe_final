@@ -1,7 +1,7 @@
 import { ErrorNegocio, errores } from './errores.js';
 
 export const ESTADO_RECIBIDO = 'RECIBIDO';
-// Ningún caso de uso cambia el estado todavía: todo pedido queda RECIBIDO (CU-14).
+// Ningún caso de uso cambia el estado todavía: todo pedido queda RECIBIDO (CU-16).
 export const ESTADOS_PEDIDO = [ESTADO_RECIBIDO, 'EN_PREPARACION', 'LISTO', 'ENTREGADO'];
 
 // Conserva cliente, fecha, estado, líneas e importe.

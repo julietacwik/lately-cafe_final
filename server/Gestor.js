@@ -119,18 +119,16 @@ export class Gestor {
     return Boolean(usuario?.esAdministrador());
   }
 
-  exigirAdministrador(usuario) {
-    this.exigirSesion(usuario);
-    if (!this.tienePermisoAdmin(usuario)) throw errores.prohibido('Solo un administrador puede realizar esta acción.');
-    return usuario;
-  }
+  // ======================================================================================
+  // Un método por caso de uso. Cada uno sigue, en orden, los mensajes de su diagrama de
+  // secuencia de la Entrega 8 (CU-16 y CU-20 también en la Entrega 6). El número entre
+  // paréntesis es el número del mensaje en el diagrama. Lo marcado como «validación»
+  // corresponde a las alternativas de datos inválidos del CU (Entrega 2).
+  // ======================================================================================
 
-  // ---------- Registro y sesiones (CU-01, CU-02) ----------
-
-  // CU-01, secuencia de la Entrega 8: buscarUsuarioPorEmail(email) → «create» Cliente(nombre, email, clave)
-  // (el cliente crea su Carrito) → guardarUsuarios. El registro público crea únicamente clientes.
-  // "confirmacion" es la clave repetida del formulario; la clave se guarda como hash con sal.
+  // ---------- CU-01 Registro de usuario (secuencia 4.1) ----------
   async registrarCliente(nombre, email, clave, confirmacion) {
+    // alt «datos inválidos» (4a)
     const campos = v.soloErrores({
       nombre: v.texto(nombre, { nombre: 'tu nombre', min: 2, max: 80 }),
       email: v.email(email),
@@ -138,27 +136,26 @@ export class Gestor {
       confirmacion: clave && confirmacion !== clave ? 'Las contraseñas no coinciden.' : null,
     });
     if (Object.keys(campos).length) throw errores.validacion(campos);
-
     const correo = v.limpiar(email).toLowerCase();
-    const exigirCorreoLibre = () => {
-      if (this.buscarUsuarioPorEmail(correo)) {
-        throw errores.conflicto('EMAIL_REGISTRADO', 'Ya existe una cuenta con ese correo.', { email: 'Ya existe una cuenta con ese correo. Iniciá sesión o usá otro.' });
-      }
-    };
-    exigirCorreoLibre();
+
+    // 1.1: buscarUsuarioPorEmail(email) → alt «email ya registrado» (4b)
+    if (this.buscarUsuarioPorEmail(correo)) throw emailRegistrado();
+
+    // 1.2: «create» Cliente(nombre, email, clave). La clave se guarda como hash (claveHash).
+    //      1.2.1: el Cliente crea su Carrito en su constructor (patrón Creador).
     const claveHash = await hashearContrasena(clave);
-    // Se vuelve a comprobar: mientras se calculaba el hash pudo registrarse el mismo correo.
-    exigirCorreoLibre();
+    if (this.buscarUsuarioPorEmail(correo)) throw emailRegistrado(); // por si se registró mientras se calculaba el hash
     const cliente = new Cliente({ nombre: v.limpiar(nombre), email: correo, claveHash });
+
     this.guardar(() => {
-      this.persistencia.guardarUsuarios([cliente]);
       this.usuarios.push(cliente);
+      // 1.3: guardarUsuarios(usuarios)
+      this.persistencia.guardarUsuarios([cliente]);
     });
     return cliente;
   }
 
-  // CU-02: buscarUsuarioPorEmail(email) → opt [existe] usuario.verificarClave(clave).
-  // Si el correo no existe se verifica igual contra un hash ficticio, para no revelar qué cuentas existen.
+  // ---------- CU-02 Inicio de sesión (secuencia 4.2) ----------
   async iniciarSesion(email, clave) {
     const campos = v.soloErrores({
       email: v.email(email),
@@ -166,11 +163,18 @@ export class Gestor {
     });
     if (Object.keys(campos).length) throw errores.validacion(campos);
 
+    // 1.1: buscarUsuarioPorEmail(email)
     const usuario = this.buscarUsuarioPorEmail(v.limpiar(email).toLowerCase());
+
+    // opt [existe un usuario con ese email] 1.2: usuario.verificarClave(clave)
+    // (si no existe se verifica contra un hash ficticio, para no revelar qué correos están registrados)
     const valida = usuario ? await usuario.verificarClave(clave) : await verificarContrasena(clave, HASH_FICTICIO);
+
+    // alt «credenciales inválidas» (4a)
     if (!usuario || !valida) {
       throw new ErrorNegocio(401, 'CREDENCIALES_INCORRECTAS', 'El correo o la contraseña no son correctos.');
     }
+    // 2: tienePermisoAdmin(usuario) lo pregunta la vista para decidir si abre el panel administrativo.
     return usuario;
   }
 
@@ -192,7 +196,8 @@ export class Gestor {
     return this.buscarUsuario(this.persistencia.buscarUsuarioIdDeSesion(hashToken(token), this.ahora()));
   }
 
-  // CU-03: cierra la sesión de este dispositivo ("token"); las de otros dispositivos siguen abiertas.
+  // ---------- CU-03 Cerrar sesión (secuencia 4.3) ----------
+  // 1: cerrarSesion(usuario). Cierra la sesión de este dispositivo ("token").
   cerrarSesion(usuario, token) {
     if (usuario && token) this.persistencia.eliminarSesion(hashToken(token));
   }
@@ -201,29 +206,39 @@ export class Gestor {
     this.persistencia.eliminarSesionesVencidas(this.ahora());
   }
 
-  // ---------- Perfil (CU-04, CU-05) ----------
-
+  // ---------- CU-04 Consultar perfil (secuencia 4.4) ----------
   consultarPerfil(usuario) {
+    // 1.1: usuario.consultarPerfil()
     return this.exigirSesion(usuario).consultarPerfil();
   }
 
-  // CU-05: el Usuario valida y modifica sus datos; después se guardan los usuarios.
+  // ---------- CU-05 Modificar perfil (secuencia 4.5) ----------
   modificarPerfil(usuario, nombre, foto, direccion, telefono) {
     this.exigirSesion(usuario);
     this.guardar(() => {
+      // 1.1: usuario.modificarPerfil(nombre, foto, direccion, telefono) — valida los datos (alt 4a)
       usuario.modificarPerfil(nombre, foto, direccion, telefono);
+      // 1.2: guardarUsuarios(usuarios)
       this.persistencia.guardarUsuarios([usuario]);
     });
     return usuario.consultarPerfil();
   }
 
-  // ---------- Menú (CU-07, CU-08) ----------
+  // ---------- CU-06 Consultar historial de pedidos (secuencia 4.6) ----------
+  consultarHistorial(cliente) {
+    // 1.1: cliente.consultarHistorial() → lista vacía si no tiene pedidos (2a)
+    return this.exigirCliente(cliente).consultarHistorial();
+  }
 
+  // ---------- CU-07 Consultar menú (secuencia 4.7) ----------
   consultarMenu() {
+    // 1.1: menu.consultar()
     return this.menu.consultar();
   }
 
+  // ---------- CU-08 Buscar productos del menú (secuencia 4.8) ----------
   buscarProducto(texto) {
+    // 1.1: menu.buscarPorNombre(texto) → lista vacía si no hay coincidencias (3a)
     return this.menu.buscarPorNombre(texto);
   }
 
@@ -237,62 +252,90 @@ export class Gestor {
     return producto;
   }
 
-  // ---------- Carrito (CU-13, CU-14, CU-15) ----------
-
-  // CU-14: cliente.getCarrito() y carrito.calcularTotal() con los precios vigentes.
-  consultarCarrito(cliente) {
-    const carrito = this.exigirCliente(cliente).getCarrito();
-    carrito.actualizarPrecios();
-    return carrito;
-  }
-
-  // CU-13: prod.estaDisponible() → carrito.agregar(prod, cant) → guardarUsuarios.
+  // ---------- CU-13 Agregar producto al carrito (secuencia 4.13) ----------
   agregarAlCarrito(cliente, prod, cant = 1) {
-    const carrito = this.consultarCarrito(cliente);
-    this.guardar(() => {
+    this.exigirCliente(cliente);
+
+    // 1.1: prod.estaDisponible() → alt «producto agotado»: informa que no puede agregarse (3a)
+    if (!prod.estaDisponible()) throw productoAgotado(prod);
+
+    // 1.2: cliente.getCarrito()
+    const carrito = cliente.getCarrito();
+    return this.guardar(() => {
+      // 1.3: carrito.agregar(prod, cant) — 1.3.1: «create» Linea(prod, cant)
       carrito.agregar(prod, cant);
+      // 1.4: carrito.calcularTotal()
+      const total = carrito.calcularTotal();
+      // 1.5: guardarUsuarios(usuarios)
       this.persistencia.guardarUsuarios([cliente]);
+      return { carrito, total }; // carrito con el total actualizado
     });
-    return carrito;
   }
 
-  // CU-15: linea.estaDisponible() (dentro de modificarCantidad) → carrito.modificarCantidad(linea, cant).
+  // ---------- CU-14 Consultar carrito (secuencia 4.14) ----------
+  consultarCarrito(cliente) {
+    // 1.1: cliente.getCarrito()
+    const carrito = this.exigirCliente(cliente).getCarrito();
+    carrito.actualizarPrecios(); // toma el precio vigente de cada producto y quita los dados de baja
+    // 1.2: carrito.calcularTotal() — loop: 1.2.1 linea.subtotal() de cada línea
+    const total = carrito.calcularTotal();
+    // alt «carrito vacío» (2a): la vista muestra «no hay productos agregados»
+    return { carrito, total };
+  }
+
+  // ---------- CU-15 Modificar carrito (secuencia 4.15) ----------
   modificarCarrito(cliente, linea, cant) {
-    const carrito = this.consultarCarrito(cliente);
-    this.guardar(() => {
+    // 1.1: cliente.getCarrito()
+    const carrito = this.exigirCliente(cliente).getCarrito();
+    carrito.exigirLinea(linea);
+
+    // 1.2: linea.estaDisponible() — 1.2.1: producto.estaDisponible()
+    //      alt «agotado o cantidad inválida»: informa el error y no modifica (3a)
+    if (!linea.estaDisponible()) {
+      throw new ErrorNegocio(409, 'PRODUCTO_AGOTADO', `${linea.producto.nombre} está agotado: quitalo del carrito.`);
+    }
+    return this.guardar(() => {
+      // 1.3: carrito.modificarCantidad(linea, cant) — valida que la cantidad sea mayor que 0
       carrito.modificarCantidad(linea, cant);
+      // 1.4: carrito.calcularTotal()
+      const total = carrito.calcularTotal();
+      // 1.5: guardarUsuarios(usuarios)
       this.persistencia.guardarUsuarios([cliente]);
+      return { carrito, total };
     });
-    return carrito;
   }
 
+  // CU-15, segunda parte: 2: eliminarDelCarrito(cliente, linea)
   eliminarDelCarrito(cliente, linea) {
-    const carrito = this.consultarCarrito(cliente);
-    this.guardar(() => {
+    const carrito = this.exigirCliente(cliente).getCarrito();
+    return this.guardar(() => {
+      // 2.1: carrito.eliminar(linea)
       carrito.eliminar(linea);
+      // 2.2: carrito.calcularTotal()
+      const total = carrito.calcularTotal();
+      // 2.3: guardarUsuarios(usuarios)
       this.persistencia.guardarUsuarios([cliente]);
+      return { carrito, total };
     });
-    return carrito;
   }
 
   // La vista envía el id del producto; el Gestor obtiene la Linea del carrito del cliente.
   obtenerLinea(cliente, productoId) {
-    return this.consultarCarrito(cliente).buscarLinea(Number(productoId));
+    return this.exigirCliente(cliente).getCarrito().buscarLinea(Number(productoId));
   }
 
-  // ---------- Pedidos (CU-16, CU-06) ----------
+  // ---------- CU-16 Realizar pedido (secuencia 4.16, igual a la de la Entrega 6) ----------
+  // El mensaje 1, consultarCarrito(cliente), es el resumen de compra (CU-14, RF-17).
+  // "claveIdempotencia" evita duplicar el pedido ante varios clics; "lineasAceptadas" es lo
+  // que el cliente vio en el resumen.
 
-  // Pedido ya confirmado con esa clave (para no duplicarlo ante varios clics).
+  // Pedido ya confirmado con esa clave.
   buscarPedidoConfirmado(cliente, claveIdempotencia) {
     if (!cliente?.esCliente()) return null;
     return cliente.pedidos.find((pedido) => pedido.claveIdempotencia === claveIdempotencia) ?? null;
   }
 
-  // CU-16, secuencia de la Entrega 6: carrito.verificarDisponibilidad() → «create» Pedido
-  // (con una Linea propia por producto, al precio vigente: RN-03) → cliente.agregarPedido(pedido)
-  // → carrito.vaciar() → guardarPedidos y guardarUsuarios, todo en una transacción.
-  // "claveIdempotencia" evita duplicar el pedido ante varios clics; "lineasAceptadas" es lo que
-  // el cliente vio en el resumen (RF-17).
+  // 2: confirmarPedido(cliente)
   confirmarPedido(cliente, claveIdempotencia, lineasAceptadas) {
     this.exigirCliente(cliente);
     if (typeof claveIdempotencia !== 'string' || !/^[\w-]{8,64}$/.test(claveIdempotencia)) {
@@ -301,28 +344,40 @@ export class Gestor {
     const existente = this.buscarPedidoConfirmado(cliente, claveIdempotencia);
     if (existente) return existente;
 
-    const carrito = this.consultarCarrito(cliente);
+    const carrito = cliente.getCarrito();
+    carrito.actualizarPrecios();
+    if (carrito.estaVacio()) throw new ErrorNegocio(409, 'CARRITO_VACIO', 'Tu carrito está vacío. Agregá productos desde el menú.');
+
+    // 2.1: carrito.verificarDisponibilidad() — loop: 2.1.1 linea.estaDisponible() → 2.1.1.1 producto.estaDisponible()
+    //      alt «algún producto agotado»: informa el producto agotado y el carrito se conserva (4a)
+    if (!carrito.verificarDisponibilidad()) {
+      const agotados = carrito.lineasNoDisponibles().map((linea) => linea.producto.nombre).join(', ');
+      throw new ErrorNegocio(409, 'PRODUCTO_AGOTADO', `Hay productos agotados en tu carrito: ${agotados}. Quitalos para continuar.`);
+    }
+
     return this.guardar(() => {
+      // 2.2: «create» Pedido(cliente, carrito.lineas) — loop por línea: 2.2.1 producto.getPrecio() y
+      //      2.2.2 «create» Linea(producto, cantidad, precio) con el precio vigente (RN-03);
+      //      2.2.3 pedido.calcularTotal(). Estado inicial: "recibido".
       const pedido = Pedido.desdeCarrito({ cliente, carrito, aceptadas: lineasAceptadas, fecha: this.ahora(), claveIdempotencia });
-      cliente.agregarPedido(pedido);
-      carrito.vaciar();
       this.pedidos.unshift(pedido);
+      // 2.3: cliente.agregarPedido(pedido)
+      cliente.agregarPedido(pedido);
+      // 2.4: carrito.vaciar()
+      carrito.vaciar();
+      // 2.5: guardarPedidos(pedidos)
       this.persistencia.guardarPedidos([pedido]);
+      // 2.6: guardarUsuarios(usuarios)
       this.persistencia.guardarUsuarios([cliente]);
       return pedido;
     });
-  }
-
-  // CU-06.
-  consultarHistorial(cliente) {
-    return this.exigirCliente(cliente).consultarHistorial();
   }
 
   buscarPedido(id) {
     return this.pedidos.find((pedido) => pedido.id === Number(id)) ?? null;
   }
 
-  // Detalle de un pedido del historial: un cliente solo accede a los suyos.
+  // Detalle de un pedido del historial (CU-06): un cliente solo accede a los suyos.
   consultarPedido(cliente, id) {
     this.exigirCliente(cliente);
     const pedido = this.buscarPedido(id);
@@ -330,8 +385,7 @@ export class Gestor {
     return pedido;
   }
 
-  // ---------- Clases e inscripciones (CU-18, CU-19, CU-20) ----------
-
+  // ---------- CU-18 Consultar clases disponibles (secuencia 4.18) ----------
   buscarClase(id) {
     return this.clases.find((clase) => clase.id === Number(id)) ?? null;
   }
@@ -342,39 +396,50 @@ export class Gestor {
     return clase;
   }
 
-  // CU-18: clases que todavía no comenzaron, con sus cupos disponibles.
+  // Clases que todavía no comenzaron, por fecha. loop: 1.1 clase.cuposDisponibles() de cada clase.
   consultarClases() {
     const ahora = this.ahora();
     return this.clases
       .filter((clase) => !clase.haComenzado(ahora))
-      .sort((a, b) => a.inicio - b.inicio);
+      .sort((a, b) => a.inicio - b.inicio)
+      .map((clase) => ({ clase, cupos: clase.cuposDisponibles() }));
   }
 
-  // CU-19: clase.hayCupo() → «create» Inscripcion(cliente, clase) → clase.agregarInscripcion
-  // → cliente.agregarInscripcion → guardarClases. RN-02: la verificación y el alta ocurren en
-  // la misma transacción y un trigger de la base impide el sobrecupo.
+  // ---------- CU-19 Inscribirse a una clase (secuencia 4.19) ----------
   inscribir(cliente, clase) {
     this.exigirCliente(cliente);
-    const ahora = this.ahora();
     if (clase.inscripcionDe(cliente)) throw errores.conflicto('INSCRIPCION_DUPLICADA', 'Ya estás inscripto en esta clase.');
-    clase.exigirInscripcionPosible(ahora);
+    if (clase.haComenzado(this.ahora())) throw new ErrorNegocio(409, 'CLASE_INICIADA', 'La clase ya comenzó; no admite nuevas inscripciones.');
+
+    // 1.1: clase.hayCupo() → alt «sin cupo»: no es posible inscribirse (3a, RN-02)
+    if (!clase.hayCupo()) throw cupoCompleto();
+
     try {
       return this.guardar(() => {
-        const insc = new Inscripcion({ cliente, clase, fechaInscripcion: ahora });
+        // 1.2: «create» Inscripcion(cliente, clase)
+        const insc = new Inscripcion({ cliente, clase, fechaInscripcion: this.ahora() });
+        // 1.3: clase.agregarInscripcion(insc)
         clase.agregarInscripcion(insc);
+        // 1.4: cliente.agregarInscripcion(insc)
         cliente.agregarInscripcion(insc);
+        // 1.5: guardarClases(clases)
         this.persistencia.guardarClases(this.clases);
+        // 1.6: guardarUsuarios(usuarios)
+        this.persistencia.guardarUsuarios([cliente]);
         return insc;
       });
     } catch (error) {
-      if (String(error.message).includes('CUPO_COMPLETO')) throw errores.conflicto('CUPO_COMPLETO', 'No quedan cupos disponibles para esta clase.');
+      // Si dos personas toman el último cupo a la vez, el trigger de la base rechaza la segunda (RN-02).
+      if (String(error.message).includes('CUPO_COMPLETO')) throw cupoCompleto();
       if (String(error.message).includes('UNIQUE')) throw errores.conflicto('INSCRIPCION_DUPLICADA', 'Ya estás inscripto en esta clase.');
       throw error;
     }
   }
 
-  // CU-20 (mensaje 1): inscripciones del cliente, por fecha de la clase.
+  // ---------- CU-20 Cancelar inscripción a una clase (secuencia 4.20, igual a la de la Entrega 6) ----------
+  // 1: consultarMisClases(cliente)
   consultarMisClases(cliente) {
+    // 1.1: cliente.consultarMisClases()
     return [...this.exigirCliente(cliente).consultarMisClases()].sort((a, b) => a.clase.inicio - b.clase.inicio);
   }
 
@@ -386,99 +451,149 @@ export class Gestor {
     return insc;
   }
 
-  // CU-20, secuencia de la Entrega 6: insc.puedeCancelarse() → alt [true] insc.cancelar()
-  // (se quita de la clase y del cliente) → guardarClases y guardarUsuarios. RN-01 con la hora del servidor.
+  // 2: cancelarInscripcion(insc)
   cancelarInscripcion(insc) {
-    const ahora = this.ahora();
+    const ahora = this.ahora(); // hora del servidor
+
+    // 2.1: insc.puedeCancelarse() — 2.1.1: clase.getInicio(); inicio − ahora ≥ 48 h (RN-01)
+    //      alt [puedeCancelarse = false]: faltan menos de 48 h, no se puede cancelar
     if (!insc.puedeCancelarse(ahora)) {
       throw new ErrorNegocio(409, 'CANCELACION_FUERA_DE_PLAZO', insc.motivoNoCancelable(ahora));
     }
     this.guardar(() => {
+      // 2.2: insc.cancelar() — 2.2.1: clase.quitarInscripcion(this) (libera el cupo)
+      //                        2.2.2: cliente.quitarInscripcion(this)
       insc.cancelar(ahora);
+      // 2.3: guardarClases(clases)
       this.persistencia.guardarClases(this.clases);
+      // 2.4: guardarUsuarios(usuarios)
       this.persistencia.guardarUsuarios([insc.cliente]);
     });
     return true;
   }
 
   // ---------- Administración: productos (CU-09 a CU-12) ----------
-  // En todas: tienePermisoAdmin(admin) y después se delega en Menu o Producto.
+  // En todas, el mensaje 1.1 es tienePermisoAdmin(admin): sin permiso, acceso denegado (RF-20).
 
-  crearProducto(admin, datos) {
-    this.exigirAdministrador(admin);
-    const prod = new Producto({});
-    prod.actualizarDatos(datos);
+  // CU-09 Crear producto (secuencia 4.9). La vista arma el Producto con los datos del formulario.
+  crearProducto(admin, prod) {
+    // 1.1: tienePermisoAdmin(admin)
+    if (!this.tienePermisoAdmin(this.exigirSesion(admin))) throw accesoDenegado();
+    // alt «datos inválidos o faltantes» (4a)
     exigirSinErrores(Producto.validar(prod));
     this.guardar(() => {
+      // 1.2: menu.agregar(prod)
       this.menu.agregar(prod);
-      this.persistencia.guardarProductos(this.menu.consultar());
+      // 1.3: menu.consultar()
+      const productos = this.menu.consultar();
+      // 1.4: guardarProductos(productos)
+      this.persistencia.guardarProductos(productos);
     });
     return prod;
   }
 
-  // RN-03: cambiar el precio no altera los pedidos, que tienen sus propias líneas.
-  modificarProducto(admin, prod, datos) {
-    this.exigirAdministrador(admin);
+  // CU-10 Modificar disponibilidad (secuencia 4.10): alterna entre disponible y agotado.
+  cambiarDisponibilidad(admin, prod) {
+    // 1.1: tienePermisoAdmin(admin)
+    if (!this.tienePermisoAdmin(this.exigirSesion(admin))) throw accesoDenegado();
     this.guardar(() => {
+      // 1.2: prod.cambiarDisponibilidad()
+      prod.cambiarDisponibilidad();
+      // 1.3: menu.consultar()
+      const productos = this.menu.consultar();
+      // 1.4: guardarProductos(productos)
+      this.persistencia.guardarProductos(productos);
+    });
+    return prod;
+  }
+
+  // CU-11 Modificar producto (secuencia 4.11). RN-03: los pedidos ya hechos conservan su precio.
+  modificarProducto(admin, prod, datos) {
+    // 1.1: tienePermisoAdmin(admin)
+    if (!this.tienePermisoAdmin(this.exigirSesion(admin))) throw accesoDenegado();
+    this.guardar(() => {
+      // 1.2: prod.actualizarDatos(datos) — alt «datos inválidos o faltantes» (4a): no se guarda nada
       prod.actualizarDatos(datos);
       exigirSinErrores(Producto.validar(prod));
-      this.persistencia.guardarProductos(this.menu.consultar());
+      // 1.3: menu.consultar()
+      const productos = this.menu.consultar();
+      // 1.4: guardarProductos(productos)
+      this.persistencia.guardarProductos(productos);
     });
     return prod;
   }
 
-  // CU-10: alterna entre disponible y agotado.
-  cambiarDisponibilidad(admin, prod) {
-    this.exigirAdministrador(admin);
-    this.guardar(() => {
-      prod.cambiarDisponibilidad();
-      this.persistencia.guardarProductos(this.menu.consultar());
-    });
-    return prod;
-  }
-
-  // CU-12: el producto sale del menú y de los carritos; el registro se conserva marcado como
-  // eliminado para que los pedidos históricos mantengan su referencia (RN-03).
+  // CU-12 Eliminar producto (secuencia 4.12).
   eliminarProducto(admin, prod) {
-    this.exigirAdministrador(admin);
+    // 1.1: tienePermisoAdmin(admin)
+    if (!this.tienePermisoAdmin(this.exigirSesion(admin))) throw accesoDenegado();
     this.guardar(() => {
-      prod.eliminar();
+      // 1.2: menu.eliminar(prod)
       this.menu.eliminar(prod);
-      this.persistencia.guardarProductos([...this.menu.consultar(), prod]);
+      // El registro se conserva marcado como eliminado para que los pedidos viejos lo sigan
+      // nombrando (RN-03, Entrega 7), y se quita de los carritos.
+      prod.eliminar();
       for (const cliente of this.clientes()) cliente.getCarrito().actualizarPrecios();
+      // 1.3: menu.consultar()
+      const productos = this.menu.consultar();
+      // 1.4: guardarProductos(productos)
+      this.persistencia.guardarProductos([...productos, prod]);
     });
+  }
+
+  // ---------- CU-17 Consultar estadísticas de ventas (secuencia 4.17) ----------
+  // 1: consultarEstadisticas(desde, hasta)
+  consultarEstadisticas(desde, hasta) {
+    // alt «período inválido» (4a): las fechas deben existir, desde ≤ hasta y hasta 3 años
+    const periodo = this.periodo(desde, hasta, { obligatorio: true });
+    // 1.1: «create» Estadisticas(pedidos)
+    const estadisticas = new Estadisticas(this.pedidos);
+    // 1.2: estadisticas.calcularIngresos(desde, hasta) — loop 1.2.1 pedido.calcularTotal()
+    const ingresos = estadisticas.calcularIngresos(periodo.inicio, periodo.fin);
+    // 1.3: estadisticas.cantidadVentas(desde, hasta)
+    const ventas = estadisticas.cantidadVentas(periodo.inicio, periodo.fin);
+    // 1.4: estadisticas.productosMasVendidos(desde, hasta, 5)
+    const masVendidos = estadisticas.productosMasVendidos(periodo.inicio, periodo.fin, 5);
+    // alt «sin ventas en el período» (5a): ventas = 0 y la vista muestra «no hay ventas para mostrar»
+    return { desde: periodo.desdeTexto, hasta: periodo.hastaTexto, ingresos, ventas, masVendidos };
   }
 
   // ---------- Administración: clases e inscriptos (CU-21 a CU-24) ----------
+  // En todas, el mensaje 1.1 es tienePermisoAdmin(admin): sin permiso, acceso denegado (RF-20).
 
-  // Todas las clases, de la más lejana a la más antigua (la pantalla marca las finalizadas).
+  // Listado de la pestaña Clases del panel: todas, de la más lejana a la más antigua.
   consultarClasesAdmin(admin) {
-    this.exigirAdministrador(admin);
+    if (!this.tienePermisoAdmin(this.exigirSesion(admin))) throw accesoDenegado();
     return [...this.clases].sort((a, b) => b.inicio - a.inicio);
   }
 
-  crearClase(admin, datos) {
-    this.exigirAdministrador(admin);
-    const clase = new ClaseBarista({});
-    clase.actualizarDatos(datos);
+  // CU-21 Crear clase (secuencia 4.21). La vista arma la ClaseBarista con los datos del formulario.
+  crearClase(admin, clase) {
+    // 1.1: tienePermisoAdmin(admin)
+    if (!this.tienePermisoAdmin(this.exigirSesion(admin))) throw accesoDenegado();
+    // alt «datos inválidos o faltantes» (4a)
     exigirSinErrores(ClaseBarista.validar(clase));
     clase.exigirFutura(this.ahora());
     this.guardar(() => {
       this.clases.push(clase);
+      // 1.2: guardarClases(clases)
       this.persistencia.guardarClases(this.clases);
     });
     return clase;
   }
 
-  // Solo se exige fecha futura si cambia el horario de la clase.
+  // CU-22 Modificar clase (secuencia 4.22). Solo se exige fecha futura si cambia el horario.
   modificarClase(admin, clase, datos) {
-    this.exigirAdministrador(admin);
+    // 1.1: tienePermisoAdmin(admin)
+    if (!this.tienePermisoAdmin(this.exigirSesion(admin))) throw accesoDenegado();
     try {
       this.guardar(() => {
         const inicioAnterior = clase.inicio.getTime();
+        // 1.2: clase.actualizarDatos(datos) — alt «datos inválidos o faltantes» (4a): no se guarda nada
         clase.actualizarDatos(datos);
         exigirSinErrores(ClaseBarista.validar(clase));
         if (clase.inicio.getTime() !== inicioAnterior) clase.exigirFutura(this.ahora());
+        // 1.3: guardarClases(clases)
         this.persistencia.guardarClases(this.clases);
       });
     } catch (error) {
@@ -490,33 +605,32 @@ export class Gestor {
     return clase;
   }
 
-  // CU-23: clase.cancelarInscripciones() (cada insc.anular() la quita del cliente), se quita la
-  // clase de la lista y se guardan clases y usuarios. Devuelve cuántas inscripciones se cancelaron.
+  // CU-23 Eliminar clase (secuencia 4.23). Devuelve cuántas inscripciones se cancelaron.
   eliminarClase(admin, clase) {
-    this.exigirAdministrador(admin);
+    // 1.1: tienePermisoAdmin(admin)
+    if (!this.tienePermisoAdmin(this.exigirSesion(admin))) throw accesoDenegado();
     return this.guardar(() => {
       const clientes = clase.getInscripciones().map((insc) => insc.cliente);
+      // 1.2: clase.cancelarInscripciones() — loop: 1.2.1 insc.anular() → 1.2.1.1 cliente.quitarInscripcion(this)
       const canceladas = clase.cancelarInscripciones();
       this.clases = this.clases.filter((c) => c !== clase);
+      // 1.3: guardarClases(clases)
       this.persistencia.guardarClases(this.clases);
+      // 1.4: guardarUsuarios(usuarios)
       this.persistencia.guardarUsuarios(clientes);
       return canceladas;
     });
   }
 
-  // CU-24.
+  // CU-24 Consultar inscriptos (secuencia 4.24).
   consultarInscriptos(admin, clase) {
-    this.exigirAdministrador(admin);
+    // 1.1: tienePermisoAdmin(admin)
+    if (!this.tienePermisoAdmin(this.exigirSesion(admin))) throw accesoDenegado();
+    // 1.2: clase.getInscripciones()
     return clase.getInscripciones();
   }
 
-  // ---------- Administración: estadísticas (CU-17) ----------
-  // La ruta verifica antes tienePermisoAdmin (transición A15 de la Entrega 7).
-
-  consultarEstadisticas(desde, hasta) {
-    return new Estadisticas(this.pedidos);
-  }
-
+  // ---------- Auxiliares ----------
   // Convierte fechas YYYY-MM-DD (hora de Argentina) en un intervalo [inicio, fin).
   periodo(desde, hasta, { obligatorio = false, porDefectoDias = 30 } = {}) {
     const formato = /^\d{4}-\d{2}-\d{2}$/;
@@ -544,6 +658,11 @@ export class Gestor {
 export function fechaArgentina(instante) {
   return new Date(instante.getTime() - 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
+
+const emailRegistrado = () => errores.conflicto('EMAIL_REGISTRADO', 'Ya existe una cuenta con ese correo.', { email: 'Ya existe una cuenta con ese correo. Iniciá sesión o usá otro.' });
+const productoAgotado = (prod) => new ErrorNegocio(409, 'PRODUCTO_AGOTADO', `${prod.nombre} está agotado y no puede agregarse al carrito.`);
+const cupoCompleto = () => errores.conflicto('CUPO_COMPLETO', 'No quedan cupos disponibles para esta clase.');
+const accesoDenegado = () => errores.prohibido('Solo un administrador puede realizar esta acción.');
 
 function exigirSinErrores(campos) {
   if (Object.keys(campos).length) throw errores.validacion(campos);

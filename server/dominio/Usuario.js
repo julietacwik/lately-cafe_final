@@ -45,7 +45,7 @@ export class Usuario {
     return verificarContrasena(clave, this.claveHash);
   }
 
-  // CU-04: el correo no se modifica; sí nombre, foto, dirección y teléfono.
+  // CU-05 (mensaje 1.1): el correo no se modifica; sí nombre, foto, dirección y teléfono.
   // Si "foto" es undefined, se conserva la actual.
   modificarPerfil(nombre, foto, direccion, telefono) {
     const campos = Usuario.validarPerfil({ nombre, direccion, telefono });

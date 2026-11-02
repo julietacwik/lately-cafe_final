@@ -11,7 +11,7 @@ export class Carrito {
     return this.lineas.find((linea) => linea.producto.id === productoId) ?? null;
   }
 
-  // CU-11: un producto agotado no puede incorporarse. Si ya está, se suma la cantidad.
+  // CU-13 (mensaje 1.3): crea la Linea (1.3.1). Si el producto ya está, suma la cantidad.
   agregar(prod, cant) {
     if (!prod.estaDisponible()) {
       throw new ErrorNegocio(409, 'PRODUCTO_AGOTADO', `${prod.nombre} está agotado y no puede agregarse al carrito.`);
@@ -29,7 +29,7 @@ export class Carrito {
     existente.cantidad += cant;
   }
 
-  // CU-13: modificar cantidad. No se confirma una modificación inválida.
+  // CU-15 (mensaje 1.3): modificar cantidad. No se confirma una modificación inválida.
   modificarCantidad(linea, cant) {
     this.exigirLinea(linea);
     Linea.exigirCantidadValida(cant);
@@ -67,6 +67,7 @@ export class Carrito {
     return this.lineas.every((linea) => linea.estaDisponible());
   }
 
+  // CU-13, 14, 15 y 16: suma el subtotal de cada línea (mensaje 1.2.1 del CU-14).
   calcularTotal() {
     return this.lineas.reduce((suma, linea) => suma + linea.subtotal(), 0);
   }

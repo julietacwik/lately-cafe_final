@@ -11,7 +11,7 @@ export class Menu {
     return [...this.productos].sort((a, b) => a.categoria.localeCompare(b.categoria, 'es') || a.nombre.localeCompare(b.nombre, 'es'));
   }
 
-  // CU-06: búsqueda por nombre, sin distinguir mayúsculas ni tildes.
+  // CU-08 (mensaje 1.1): búsqueda por nombre, sin distinguir mayúsculas ni tildes.
   buscarPorNombre(texto = '') {
     const consulta = normalizar(texto);
     if (!consulta) return this.consultar();

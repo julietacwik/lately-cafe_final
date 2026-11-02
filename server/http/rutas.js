@@ -8,10 +8,15 @@ import {
   limitarIntentos, subidaImagen, guardarImagen,
 } from './middlewares.js';
 import { CATEGORIAS } from '../config.js';
+import { Producto } from '../dominio/Producto.js';
+import { ClaseBarista } from '../dominio/ClaseBarista.js';
 
 const aBooleano = (valor) => (valor === true || valor === 'true' ? true : valor === false || valor === 'false' ? false : undefined);
 
 // ---------- Conversión a JSON ----------
+
+// El Gestor devuelve el carrito con su total (mensaje calcularTotal() de las secuencias).
+const carritoConTotal = ({ carrito, total }) => ({ ...carrito.aJSON(), total });
 
 const cantidadProductos = (lineas) => lineas.reduce((suma, linea) => suma + linea.cantidad, 0);
 
@@ -74,19 +79,19 @@ export function crearRutas({ gestor, config }) {
   api.get('/categorias', (_req, res) => res.json(CATEGORIAS));
 
   // ---------- Carrito (CU-13, CU-14, CU-15) ----------
-  api.get('/carrito', (req, res) => res.json(gestor.consultarCarrito(req.usuario).aJSON()));
+  api.get('/carrito', (req, res) => res.json(carritoConTotal(gestor.consultarCarrito(req.usuario))));
   api.post('/carrito/lineas', (req, res) => {
     const { productoId, cantidad } = req.body ?? {};
     gestor.exigirCliente(req.usuario);
-    res.status(201).json(gestor.agregarAlCarrito(req.usuario, gestor.obtenerProducto(productoId), cantidad).aJSON());
+    res.status(201).json(carritoConTotal(gestor.agregarAlCarrito(req.usuario, gestor.obtenerProducto(productoId), cantidad)));
   });
   api.patch('/carrito/lineas/:productoId', (req, res) => {
     const linea = gestor.obtenerLinea(req.usuario, req.params.productoId);
-    res.json(gestor.modificarCarrito(req.usuario, linea, req.body?.cantidad).aJSON());
+    res.json(carritoConTotal(gestor.modificarCarrito(req.usuario, linea, req.body?.cantidad)));
   });
   api.delete('/carrito/lineas/:productoId', (req, res) => {
     const linea = gestor.obtenerLinea(req.usuario, req.params.productoId);
-    res.json(gestor.eliminarDelCarrito(req.usuario, linea).aJSON());
+    res.json(carritoConTotal(gestor.eliminarDelCarrito(req.usuario, linea)));
   });
 
   // ---------- Pedidos (CU-16, CU-06) ----------
@@ -102,7 +107,7 @@ export function crearRutas({ gestor, config }) {
   // ---------- Clases (CU-18, CU-19, CU-20) ----------
   api.get('/clases', (req, res) => {
     const cliente = req.usuario?.esCliente() ? req.usuario : null;
-    res.json(gestor.consultarClases().map((clase) => ({ ...clase.aJSON(), inscripto: Boolean(cliente && clase.inscripcionDe(cliente)) })));
+    res.json(gestor.consultarClases().map(({ clase, cupos }) => ({ ...clase.aJSON(), cuposDisponibles: cupos, inscripto: Boolean(cliente && clase.inscripcionDe(cliente)) })));
   });
   api.post('/clases/:id/inscripciones', requiereSesion, (req, res) => {
     const inscripcion = gestor.inscribir(req.usuario, gestor.obtenerClase(req.params.id));
@@ -127,7 +132,10 @@ export function crearRutas({ gestor, config }) {
   admin.get('/productos', (req, res) => res.json(gestor.consultarMenu().map((producto) => producto.aJSON())));
   admin.post('/productos', subidaImagen('imagen'), (req, res) => {
     const datos = { ...req.body, disponible: aBooleano(req.body?.disponible) ?? true, imagen: guardarImagen(req.file, config.directorioSubidas, 'imagen') };
-    res.status(201).json(gestor.crearProducto(req.usuario, datos).aJSON());
+    // «create» Producto con los datos del formulario; después, mensaje 1 del CU-09.
+    const prod = new Producto({});
+    prod.actualizarDatos(datos);
+    res.status(201).json(gestor.crearProducto(req.usuario, prod).aJSON());
   });
   admin.put('/productos/:id', subidaImagen('imagen'), (req, res) => {
     const datos = { ...req.body, disponible: aBooleano(req.body?.disponible), imagen: guardarImagen(req.file, config.directorioSubidas, 'imagen') };
@@ -152,7 +160,10 @@ export function crearRutas({ gestor, config }) {
   });
   admin.post('/clases', subidaImagen('imagen'), (req, res) => {
     const datos = { ...req.body, imagen: guardarImagen(req.file, config.directorioSubidas, 'imagen') };
-    res.status(201).json(gestor.crearClase(req.usuario, datos).aJSON());
+    // «create» ClaseBarista con los datos del formulario; después, mensaje 1 del CU-21.
+    const clase = new ClaseBarista({});
+    clase.actualizarDatos(datos);
+    res.status(201).json(gestor.crearClase(req.usuario, clase).aJSON());
   });
   admin.put('/clases/:id', subidaImagen('imagen'), (req, res) => {
     const datos = { ...req.body, imagen: guardarImagen(req.file, config.directorioSubidas, 'imagen') };
@@ -167,9 +178,11 @@ export function crearRutas({ gestor, config }) {
 
   // CU-17.
   admin.get('/estadisticas', (req, res) => {
-    const periodo = gestor.periodo(req.query.desde, req.query.hasta, { obligatorio: true });
-    const estadisticas = gestor.consultarEstadisticas(periodo.inicio, periodo.fin);
-    res.json({ desde: periodo.desdeTexto, hasta: periodo.hastaTexto, ...estadisticas.aJSON(periodo.inicio, periodo.fin) });
+    const { desde, hasta, ingresos, ventas, masVendidos } = gestor.consultarEstadisticas(req.query.desde, req.query.hasta);
+    res.json({
+      desde, hasta, importeTotal: ingresos, cantidadVentas: ventas,
+      ticketPromedio: ventas ? Math.round(ingresos / ventas) : 0, productosMasVendidos: masVendidos,
+    });
   });
 
   api.use('/admin', admin);
