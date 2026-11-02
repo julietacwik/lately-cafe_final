@@ -1,0 +1,38 @@
+# Blueprint de Render para Lately Café (ver docs/RENDER.md).
+# Crea un servicio web Node.js con un disco persistente para SQLite y las imágenes subidas.
+# ATENCIÓN: el plan y el disco son PAGOS (los servicios gratuitos no admiten discos).
+services:
+  - type: web
+    name: lately-cafe
+    runtime: node
+    plan: 0.5c-512mb          # 0.5 CPU / 512 MB (ex "Starter")
+    region: virginia          # la región de Render más cercana a Argentina
+    branch: main
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/salud
+    autoDeployTrigger: commit # cada push a main vuelve a desplegar; los datos del disco se conservan
+    disk:
+      name: lately-datos
+      mountPath: /var/data    # solo lo que está bajo esta ruta sobrevive a reinicios y despliegues
+      sizeGB: 1               # se puede ampliar después, pero no reducir
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_PATH
+        value: /var/data/lately.db
+      - key: UPLOADS_DIR
+        value: /var/data/uploads
+      - key: SEED_DEMO
+        value: "false"
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: TRUST_PROXY
+        value: "true"
+      - key: SESSION_DAYS
+        value: "7"
+      # Opcional: dominio propio. Si se deja vacío se usa la URL .onrender.com (RENDER_EXTERNAL_URL).
+      - key: PUBLIC_URL
+        sync: false

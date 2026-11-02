@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lately Café</title>
+  <meta name="description" content="Lately Café: menú de especialidad, pedidos y clases de barista.">
+  <meta name="theme-color" content="#4a1834">
+  <link rel="icon" href="/img/logo.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="/css/estilos.css">
+  <script type="module" src="/js/app.js"></script>
+</head>
+<body>
+  <a class="saltar" href="#contenido">Saltar al contenido</a>
+  <header class="encabezado" id="encabezado"></header>
+  <main id="contenido" tabindex="-1">
+    <div class="estado estado--cargando" role="status"><span class="girador" aria-hidden="true"></span>Cargando…</div>
+  </main>
+  <footer class="pie">
+    <div class="contenedor pie__interior">
+      <div>
+        <p class="pie__marca"><img src="/img/logo.png" alt="" width="38" height="38">Lately Café</p>
+        <p class="pie__texto">Café de especialidad, pedidos y clases de barista.</p>
+      </div>
+      <nav aria-label="Enlaces del pie">
+        <ul class="pie__enlaces">
+          <li><a href="/menu">Menú</a></li>
+          <li><a href="/clases">Clases de barista</a></li>
+          <li><a href="/perfil">Mi cuenta</a></li>
+        </ul>
+      </nav>
+      <p class="pie__aviso">Proyecto académico · Ingeniería de Software II. Los productos, precios, docentes, clientes y pedidos que se muestran son <strong>datos de demostración</strong>. Confirmar un pedido lo registra como recibido; la aplicación no procesa pagos. Fotografías: Unsplash.</p>
+    </div>
+  </footer>
+  <div class="avisos" id="avisos" aria-live="polite" aria-atomic="false"></div>
+  <dialog class="dialogo" id="dialogo" aria-labelledby="dialogo-titulo"></dialog>
+  <noscript><p class="contenedor">Necesitás activar JavaScript para usar Lately Café.</p></noscript>
+</body>
+</html>

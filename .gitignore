@@ -1,0 +1,46 @@
+# Dependencias
+node_modules/
+
+# Variables de entorno y secretos
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*.json
+secrets*.json
+
+# Base de datos local (se crea con las migraciones y los datos demo)
+data/*
+!data/.gitkeep
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Imágenes subidas por usuarios
+uploads/*
+!uploads/.gitkeep
+
+# Registros, temporales y compilaciones
+*.log
+npm-debug.log*
+logs/
+tmp/
+coverage/
+dist/
+build/
+.cache/
+
+# Sistema operativo y editores
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/settings.json

@@ -1,0 +1,22 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Lately Café: servidor",
+      "program": "${workspaceFolder}/server/index.js",
+      "runtimeArgs": ["--disable-warning=ExperimentalWarning"],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Lately Café: pruebas",
+      "runtimeArgs": ["--disable-warning=ExperimentalWarning", "--test", "--test-concurrency=1", "tests/*.test.js"],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ]
+}

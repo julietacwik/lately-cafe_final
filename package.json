@@ -1,0 +1,28 @@
+{
+  "name": "lately-cafe",
+  "version": "1.0.0",
+  "description": "Aplicación web de Lately Café: menú, carrito, pedidos y clases de barista.",
+  "private": true,
+  "type": "module",
+  "main": "server/index.js",
+  "engines": {
+    "node": ">=22.13.0 <25"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server/index.js",
+    "dev": "node --watch --disable-warning=ExperimentalWarning server/index.js",
+    "db:migrar": "node --disable-warning=ExperimentalWarning server/persistencia/migrar.js",
+    "db:demo": "node --disable-warning=ExperimentalWarning server/persistencia/datosDemo.js",
+    "crear-admin": "node --disable-warning=ExperimentalWarning scripts/crear-admin.js",
+    "test": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 \"tests/*.test.js\"",
+    "prueba:carga": "node --disable-warning=ExperimentalWarning scripts/prueba-carga.js",
+    "prueba:navegador": "node scripts/prueba-navegador.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "multer": "^2.0.2"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.49.1"
+  }
+}

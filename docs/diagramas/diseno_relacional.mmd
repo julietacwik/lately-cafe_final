@@ -1,0 +1,71 @@
+erDiagram
+  usuarios ||--o{ carrito_lineas : "carrito del cliente"
+  usuarios ||--o{ pedidos : realiza
+  usuarios ||--o{ inscripciones : "se inscribe"
+  usuarios ||--o{ sesiones : "inicia"
+  productos ||--o{ carrito_lineas : "en el carrito"
+  productos ||--o{ pedido_lineas : "en el pedido"
+  pedidos ||--|{ pedido_lineas : contiene
+  clases ||--o{ inscripciones : recibe
+  usuarios {
+    INTEGER id PK
+    TEXT tipo "CLIENTE o ADMINISTRADOR"
+    TEXT nombre
+    TEXT email UK
+    TEXT password_hash
+    TEXT foto "NULL"
+    TEXT direccion "NULL"
+    TEXT telefono "NULL"
+  }
+  productos {
+    INTEGER id PK
+    TEXT nombre
+    TEXT descripcion
+    INTEGER precio "mayor a 0"
+    TEXT categoria
+    TEXT imagen "NULL"
+    INTEGER disponible "0 o 1"
+    INTEGER eliminado "0 o 1"
+  }
+  carrito_lineas {
+    INTEGER cliente_id PK,FK
+    INTEGER producto_id PK,FK
+    INTEGER cantidad "1 a 99"
+  }
+  pedidos {
+    INTEGER id PK
+    INTEGER cliente_id FK
+    TEXT fecha
+    TEXT estado "RECIBIDO"
+    INTEGER importe_total
+    TEXT clave_idempotencia "UK con cliente_id"
+  }
+  pedido_lineas {
+    INTEGER id PK
+    INTEGER pedido_id FK
+    INTEGER producto_id FK
+    TEXT nombre_producto
+    INTEGER cantidad
+    INTEGER precio_unitario "RN-03"
+  }
+  clases {
+    INTEGER id PK
+    TEXT nombre
+    TEXT descripcion
+    TEXT docente
+    TEXT inicio "fecha y horario"
+    INTEGER duracion_min
+    INTEGER cupo "1 a 8"
+    TEXT imagen "NULL"
+  }
+  inscripciones {
+    INTEGER id PK
+    INTEGER clase_id FK "ON DELETE CASCADE"
+    INTEGER cliente_id FK
+    TEXT creada_en
+  }
+  sesiones {
+    TEXT token_hash PK
+    INTEGER usuario_id FK
+    TEXT expira_en
+  }
