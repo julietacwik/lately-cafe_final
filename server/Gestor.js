@@ -208,20 +208,21 @@ export class Gestor {
 
   // ---------- CU-04 Consultar perfil (secuencia 4.4) ----------
   consultarPerfil(usuario) {
-    // 1.1: usuario.consultarPerfil()
-    return this.exigirSesion(usuario).consultarPerfil();
+    this.exigirSesion(usuario); // precondición: sesión iniciada
+    // 1.1: usuario.consultarPerfil() → Usuario (nombre, foto, dirección y teléfono)
+    return usuario.consultarPerfil();
   }
 
   // ---------- CU-05 Modificar perfil (secuencia 4.5) ----------
   modificarPerfil(usuario, nombre, foto, direccion, telefono) {
-    this.exigirSesion(usuario);
+    this.exigirSesion(usuario); // precondición: sesión iniciada
     this.guardar(() => {
       // 1.1: usuario.modificarPerfil(nombre, foto, direccion, telefono) — valida los datos (alt 4a)
       usuario.modificarPerfil(nombre, foto, direccion, telefono);
       // 1.2: guardarUsuarios(usuarios)
       this.persistencia.guardarUsuarios([usuario]);
     });
-    return usuario.consultarPerfil();
+    return usuario; // respuesta: perfil actualizado
   }
 
   // ---------- CU-06 Consultar historial de pedidos (secuencia 4.6) ----------
